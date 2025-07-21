@@ -60,4 +60,13 @@ ipcMain.handle('delete-produto', (event, id) => {
       else resolve();
     });
   });
+});
+
+ipcMain.handle('finalizar-compra', (event, { itens, total, formaPagamento }) => {
+  return new Promise((resolve, reject) => {
+    db.registrarVenda(itens, total, formaPagamento, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
 }); 

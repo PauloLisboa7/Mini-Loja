@@ -190,4 +190,25 @@ td button:hover {
 }
 .logo-loja:hover {
   transform: scale(1.07) rotate(-2deg);
+}
+
+#btn-finalizar-compra {
+  display: block;
+  margin: 32px auto 0 auto;
+  padding: 18px 60px;
+  background: linear-gradient(90deg, #ff9800 60%, #ffc107 100%);
+  color: #fff;
+  font-size: 1.5em;
+  font-weight: bold;
+  border: none;
+  border-radius: 32px;
+  box-shadow: 0 4px 24px #ff980055, 0 2px 8px #0001;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+#btn-finalizar-compra:hover, #btn-finalizar-compra:focus {
+  background: linear-gradient(90deg, #ffc107 60%, #ff9800 100%);
+  transform: scale(1.07);
+  box-shadow: 0 8px 32px #ff980099;
 } 

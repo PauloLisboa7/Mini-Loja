@@ -134,5 +134,34 @@ window.alterarQuantidade = (id, quantidade) => {
   }
 };
 
+// Finalizar Compra
+document.addEventListener('DOMContentLoaded', function() {
+  const btnFinalizarCompra = document.getElementById('btn-finalizar-compra');
+  const selectFormaPagamento = document.getElementById('forma-pagamento');
+  if (btnFinalizarCompra) {
+    btnFinalizarCompra.onclick = async () => {
+      if (carrinho.length === 0) {
+        alert('O carrinho está vazio!');
+        return;
+      }
+      const total = carrinho.reduce((soma, item) => soma + item.preco * item.quantidade, 0);
+      const formaPagamento = selectFormaPagamento ? selectFormaPagamento.value : 'Dinheiro';
+      try {
+        await ipcRenderer.invoke('finalizar-compra', {
+          itens: carrinho,
+          total,
+          formaPagamento
+        });
+        alert('Compra finalizada com sucesso!');
+        carrinho = [];
+        renderizarCarrinho();
+        carregarProdutos(); // Atualiza o estoque na tela
+      } catch (err) {
+        alert('Erro ao finalizar compra: ' + err);
+      }
+    };
+  }
+});
+
 // Inicialização
 carregarProdutos(); 
