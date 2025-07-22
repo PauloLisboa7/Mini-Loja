@@ -72,10 +72,67 @@ function deleteProduto(id, callback) {
   });
 }
 
+// Buscar todos os produtos (alias para compatibilidade)
+function getAllProdutos(callback) {
+  getProdutos(callback);
+}
+
+// Registrar venda
+function registrarVenda(itens, total, formaPagamento, callback) {
+  // Criar tabela de vendas se não existir
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vendas (
+      id INTEGER PRIMARY KEY,
+      total REAL NOT NULL,
+      forma_pagamento TEXT NOT NULL,
+      data_venda DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `, (err) => {
+    if (err) {
+      callback(err);
+      return;
+    }
+    
+    // Inserir venda
+    db.run(`
+      INSERT INTO vendas (total, forma_pagamento) VALUES (?, ?);
+    `, [total, formaPagamento], function(err) {
+      if (err) {
+        callback(err);
+      } else {
+        // Atualizar estoque dos produtos vendidos
+        let completed = 0;
+        let hasError = false;
+        
+        if (itens.length === 0) {
+          callback(null);
+          return;
+        }
+        
+        itens.forEach(item => {
+          db.run(`
+            UPDATE produtos SET estoque = estoque - ? WHERE id = ?;
+          `, [item.quantidade, item.id], (err) => {
+            completed++;
+            if (err && !hasError) {
+              hasError = true;
+              callback(err);
+            } else if (completed === itens.length && !hasError) {
+              callback(null);
+            }
+          });
+        });
+      }
+    });
+  });
+}
+
 module.exports = {
   getProduto,
   getProdutos,
+  getAllProdutos,
   addProduto,
   updateProduto,
-  deleteProduto
+  deleteProduto,
+  registrarVenda
 };
