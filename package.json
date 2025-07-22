@@ -4,6 +4,7 @@
     "start": "electron ."
   },
   "dependencies": {
+    "electron": "^37.2.3",
     "sqlite3": "^5.1.7"
   }
 }

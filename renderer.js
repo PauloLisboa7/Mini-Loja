@@ -1,4 +1,5 @@
-const { ipcRenderer } = require('electron');
+const ipcRenderer = require('electron').ipcRenderer;
+const db = require('./db');
 
 // Alternar abas
 const tabProdutos = document.getElementById('tab-produtos');
@@ -24,22 +25,26 @@ let editando = false;
 let produtoEditandoId = null;
 
 function carregarProdutos() {
-  ipcRenderer.invoke('get-produtos').then(produtos => {
-    tabelaProdutos.innerHTML = '';
-    produtos.forEach(produto => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${produto.nome}</td>
-        <td>R$ ${produto.preco.toFixed(2)}</td>
-        <td>${produto.estoque}</td>
-        <td>
-          <button onclick="editarProduto(${produto.id}, '${produto.nome}', ${produto.preco}, ${produto.estoque})">Editar</button>
-          <button onclick="deletarProduto(${produto.id})">Excluir</button>
-          <button onclick="adicionarCarrinho(${produto.id}, '${produto.nome}', ${produto.preco})">Adicionar ao Carrinho</button>
-        </td>
-      `;
-      tabelaProdutos.appendChild(tr);
-    });
+  db.getProdutos((err, produtos) => {
+    if (err) {
+      console.error(err);
+    } else {
+      tabelaProdutos.innerHTML = '';
+      produtos.forEach(produto => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${produto.nome}</td>
+          <td>R$ ${produto.preco.toFixed(2)}</td>
+          <td>${produto.estoque}</td>
+          <td>
+            <button onclick="editarProduto(${produto.id}, '${produto.nome}', ${produto.preco}, ${produto.estoque})">Editar</button>
+            <button onclick="deletarProduto(${produto.id})">Excluir</button>
+            <button onclick="adicionarCarrinho(${produto.id}, '${produto.nome}', ${produto.preco})">Adicionar ao Carrinho</button>
+          </td>
+        `;
+        tabelaProdutos.appendChild(tr);
+      });
+    }
   });
 }
 
@@ -54,7 +59,13 @@ window.editarProduto = (id, nome, preco, estoque) => {
 };
 
 window.deletarProduto = (id) => {
-  ipcRenderer.invoke('delete-produto', id).then(() => carregarProdutos());
+  db.deleteProduto(id, (err) => {
+    if (err) {
+      console.error(err);
+    } else {
+      carregarProdutos();
+    }
+  });
 };
 
 formProduto.onsubmit = (e) => {
@@ -63,17 +74,25 @@ formProduto.onsubmit = (e) => {
   const preco = parseFloat(document.getElementById('produto-preco').value);
   const estoque = parseInt(document.getElementById('produto-estoque').value);
   if (editando) {
-    ipcRenderer.invoke('update-produto', { id: produtoEditandoId, nome, preco, estoque }).then(() => {
-      editando = false;
-      produtoEditandoId = null;
-      cancelarEdicao.style.display = 'none';
-      formProduto.reset();
-      carregarProdutos();
+    db.updateProduto({ id: produtoEditandoId, nome, preco, estoque }, (err) => {
+      if (err) {
+        console.error(err);
+      } else {
+        editando = false;
+        produtoEditandoId = null;
+        cancelarEdicao.style.display = 'none';
+        formProduto.reset();
+        carregarProdutos();
+      }
     });
   } else {
-    ipcRenderer.invoke('add-produto', { nome, preco, estoque }).then(() => {
-      formProduto.reset();
-      carregarProdutos();
+    db.addProduto({ nome, preco, estoque }, (err) => {
+      if (err) {
+        console.error(err);
+      } else {
+        formProduto.reset();
+        carregarProdutos();
+      }
     });
   }
 };
@@ -91,12 +110,47 @@ let carrinho = [];
 window.adicionarCarrinho = (id, nome, preco) => {
   const item = carrinho.find(p => p.id === id);
   if (item) {
-    item.quantidade++;
+    verificarEstoque(item, item.quantidade + 1);
   } else {
     carrinho.push({ id, nome, preco, quantidade: 1 });
+    renderizarCarrinho();
+  }
+};
+
+function verificarEstoque(produto, quantidade) {
+  db.getProduto(produto.id, (err, produtoDB) => {
+    if (err) {
+      console.error(err);
+    } else {
+      if (produtoDB.estoque < quantidade) {
+        alert("Estoque insuficiente!");
+      } else {
+        atualizarEstoque(produto, quantidade);
+        adicionarAoCarrinho(produto, quantidade);
+      }
+    }
+  });
+}
+
+function atualizarEstoque(produto, quantidade) {
+  db.updateProduto({ id: produto.id, estoque: produto.estoque - quantidade }, (err) => {
+    if (err) {
+      console.error(err);
+    } else {
+      console.log("Estoque atualizado!");
+    }
+  });
+}
+
+function adicionarAoCarrinho(produto, quantidade) {
+  const item = carrinho.find(p => p.id === produto.id);
+  if (item) {
+    item.quantidade += quantidade;
+  } else {
+    carrinho.push({ id: produto.id, nome: produto.nome, preco: produto.preco, quantidade: quantidade });
   }
   renderizarCarrinho();
-};
+}
 
 function renderizarCarrinho() {
   const tabelaCarrinho = document.getElementById('tabela-carrinho').querySelector('tbody');
@@ -121,47 +175,18 @@ function renderizarCarrinho() {
   document.getElementById('total-itens').textContent = totalItens;
 }
 
-window.removerCarrinho = (id) => {
-  carrinho = carrinho.filter(item => item.id !== id);
-  renderizarCarrinho();
-};
-
 window.alterarQuantidade = (id, quantidade) => {
   const item = carrinho.find(p => p.id === id);
   if (item) {
-    item.quantidade = parseInt(quantidade);
+    item.quantidade = quantidade;
     renderizarCarrinho();
   }
 };
 
-// Finalizar Compra
-document.addEventListener('DOMContentLoaded', function() {
-  const btnFinalizarCompra = document.getElementById('btn-finalizar-compra');
-  const selectFormaPagamento = document.getElementById('forma-pagamento');
-  if (btnFinalizarCompra) {
-    btnFinalizarCompra.onclick = async () => {
-      if (carrinho.length === 0) {
-        alert('O carrinho está vazio!');
-        return;
-      }
-      const total = carrinho.reduce((soma, item) => soma + item.preco * item.quantidade, 0);
-      const formaPagamento = selectFormaPagamento ? selectFormaPagamento.value : 'Dinheiro';
-      try {
-        await ipcRenderer.invoke('finalizar-compra', {
-          itens: carrinho,
-          total,
-          formaPagamento
-        });
-        alert('Compra finalizada com sucesso!');
-        carrinho = [];
-        renderizarCarrinho();
-        carregarProdutos(); // Atualiza o estoque na tela
-      } catch (err) {
-        alert('Erro ao finalizar compra: ' + err);
-      }
-    };
+window.removerCarrinho = (id) => {
+  const item = carrinho.find(p => p.id === id);
+  if (item) {
+    carrinho.splice(carrinho.indexOf(item), 1);
+    renderizarCarrinho();
   }
-});
-
-// Inicialização
-carregarProdutos(); 
+};
